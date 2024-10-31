@@ -1,9 +1,13 @@
 === Log cleaner for Solid Security ===
 Contributors:       mikeyott
+Author URI:         https://rocketapps.com.au/
+Plugin URI:         https://wordpress.org/plugins/log-cleaner-for-ithemes-security/
 Tags:               solid, security, ithemes, log, cleaner
 Requires at least:  6.0
-Tested up to:       6.4
+Tested up to:       6.7
 Stable tag:         1.4.1
+License:            GPLv3 or later
+License URI:        https://www.gnu.org/licenses/gpl-3.0.html
 
 Restores the ability to manually delete Solid Security logs from the database.
 
