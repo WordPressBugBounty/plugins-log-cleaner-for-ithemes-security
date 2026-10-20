@@ -1,284 +1,290 @@
 <?php
 /*
-Plugin Name:    Log cleaner for Solid Security
-Plugin URI:     https://wordpress.org/plugins/log-cleaner-for-solid-security/
-Description:    Delete Solid Security logs from the database.
-Version:        1.4.1
-Author:         Rocket Apps
-Author URI:     https://rocketapps.com.au/
-License:        GPL2
-Domain Path:    /languages/
+Plugin Name:        Log cleaner for Kadence Security
+Plugin URI:         https://wordpress.org/plugins/log-cleaner-for-ithemes-security/
+Description:        Delete Kadence Security (formerly Solid Security / iThemes Security) logs from the database.
+Version:            1.5.0
+Requires at least:  6.0
+Requires PHP:       7.4
+Author:             Rocket Apps
+Author URI:         https://rocketapps.com.au/
+License:            GPLv3 or later
+License URI:        https://www.gnu.org/licenses/gpl-3.0.html
+Text Domain:        log-cleaner-for-ithemes-security
+Domain Path:        /languages/
 */
 
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-// Look for translation file.
-function load_log_cleaner_textdomain() {
-    load_plugin_textdomain( 'log-cleaner-for-solid-security', false, dirname( plugin_basename( __FILE__ ) ) . '/languages/' );
-}
-add_action( 'plugins_loaded', 'load_log_cleaner_textdomain' );
+define( 'LCIS_VERSION', '1.5.0' );
+define( 'LCIS_SLUG', 'log-cleaner-for-ithemes-security' );
 
-// Create admin page under the Tools menu.
-if ( is_multisite() ) {
-    add_action('network_admin_menu', 'create_network_cleaner_submenu');
-    function create_network_cleaner_submenu() {
-        $icon =  plugins_url('images/', __FILE__ ) . 'shield.svg';
-        add_menu_page( "Solid Security Log Cleaner", "Solid Security Log Cleaner", 'manage_options', 'log-cleaner-for-solid-security', 'generate_page_content', $icon);	
-    }
-} else {
-    add_action('admin_menu', 'create_tools_cleaner_submenu');
-    function create_tools_cleaner_submenu() {
-        add_management_page( 'Solid Security Log Cleaner', 'Solid Security Log Cleaner', 'manage_options', 'log-cleaner-for-solid-security', 'generate_page_content' );
-    }
+// Load translations.
+function lcis_load_textdomain() {
+    load_plugin_textdomain( 'log-cleaner-for-ithemes-security', false, dirname( plugin_basename( __FILE__ ) ) . '/languages/' );
+}
+add_action( 'init', 'lcis_load_textdomain' );
+
+// Capability required to view the page and delete logs.
+function lcis_capability() {
+    return is_multisite() ? 'manage_network_options' : 'manage_options';
 }
 
-// Add custom CSS to admin
-function log_cleaner_admin_style() {
-    $plugin_data = get_plugin_data( __FILE__ );
-    $plugin_version = $plugin_data['Version'];
-	$plugin_directory = plugins_url('css/', __FILE__ );
-    wp_enqueue_style('log-cleaner-style-admin', $plugin_directory . 'log-cleaner.css', '', $plugin_version);
+// Tables managed by this plugin. Kadence Security uses network-wide tables on multisite.
+function lcis_tables() {
+    global $wpdb;
+
+    return array(
+        'logs'      => array( 'table' => $wpdb->base_prefix . 'itsec_logs',                'label' => __( 'Security logs', 'log-cleaner-for-ithemes-security' ) ),
+        'dashboard' => array( 'table' => $wpdb->base_prefix . 'itsec_dashboard_events',    'label' => __( 'Dashboard logs', 'log-cleaner-for-ithemes-security' ) ),
+        'dash_lock' => array( 'table' => $wpdb->base_prefix . 'itsec_dashboard_lockouts',  'label' => __( 'Dashboard lockouts', 'log-cleaner-for-ithemes-security' ) ),
+        'lockouts'  => array( 'table' => $wpdb->base_prefix . 'itsec_lockouts',            'label' => __( 'Lockouts', 'log-cleaner-for-ithemes-security' ) ),
+        'temp'      => array( 'table' => $wpdb->base_prefix . 'itsec_temp',                'label' => __( 'Temps', 'log-cleaner-for-ithemes-security' ) ),
+        'geo'       => array( 'table' => $wpdb->base_prefix . 'itsec_geolocation_cache',   'label' => __( 'Geolocation cache', 'log-cleaner-for-ithemes-security' ) ),
+        'ds'        => array( 'table' => $wpdb->base_prefix . 'itsec_distributed_storage', 'label' => __( 'Distributed Storage', 'log-cleaner-for-ithemes-security' ) ),
+    );
 }
-add_action('admin_enqueue_scripts', 'log_cleaner_admin_style');
+
+function lcis_table_exists( $table ) {
+    global $wpdb;
+    return $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) === $table;
+}
+
+// Row count, or 0 if the table doesn't exist.
+function lcis_row_count( $table ) {
+    global $wpdb;
+
+    if ( ! lcis_table_exists( $table ) ) {
+        return 0;
+    }
+
+    return (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$table}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+}
+
+// Disk space (data + indexes) in bytes, keyed by table name.
+function lcis_table_sizes( $table_names ) {
+    global $wpdb;
+
+    // MySQL 8 caches these stats for up to 24 hours by default.
+    if ( $wpdb->get_var( "SHOW VARIABLES LIKE 'information_schema_stats_expiry'" ) ) {
+        $wpdb->query( 'SET SESSION information_schema_stats_expiry = 0' );
+    }
+
+    $placeholders = implode( ', ', array_fill( 0, count( $table_names ), '%s' ) );
+    $results      = $wpdb->get_results(
+        $wpdb->prepare(
+            "SELECT TABLE_NAME AS name, DATA_LENGTH + INDEX_LENGTH AS bytes FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ( $placeholders )",
+            $table_names
+        )
+    );
+
+    $sizes = array();
+    foreach ( (array) $results as $row ) {
+        $sizes[ $row->name ] = (int) $row->bytes;
+    }
+
+    return $sizes;
+}
+
+// Admin menu.
+function lcis_register_menu() {
+    global $lcis_hook;
+
+    if ( is_multisite() ) {
+        $lcis_hook = add_menu_page(
+            __( 'Kadence Security Log Cleaner', 'log-cleaner-for-ithemes-security' ),
+            __( 'Kadence Security Log Cleaner', 'log-cleaner-for-ithemes-security' ),
+            lcis_capability(),
+            LCIS_SLUG,
+            'lcis_render_page',
+            plugins_url( 'images/shield.svg', __FILE__ )
+        );
+    } else {
+        $lcis_hook = add_management_page(
+            __( 'Kadence Security Log Cleaner', 'log-cleaner-for-ithemes-security' ),
+            __( 'Kadence Security Log Cleaner', 'log-cleaner-for-ithemes-security' ),
+            lcis_capability(),
+            LCIS_SLUG,
+            'lcis_render_page'
+        );
+    }
+}
+add_action( is_multisite() ? 'network_admin_menu' : 'admin_menu', 'lcis_register_menu' );
+
+// Assets, only on the plugin page.
+function lcis_admin_assets( $hook ) {
+    global $lcis_hook;
+
+    if ( empty( $lcis_hook ) || $hook !== $lcis_hook ) {
+        return;
+    }
+
+    wp_enqueue_style( 'log-cleaner-style-admin', plugins_url( 'css/log-cleaner.css', __FILE__ ), array(), LCIS_VERSION );
+
+    wp_enqueue_script( 'jquery' );
+    $js = <<<'JS'
+        jQuery(function($) {
+            var $wrap  = $('.log-cleaner');
+            var $items = $wrap.find('.other-items');
+
+            $wrap.find('#lcis-all').on('change', function() {
+                $items.prop('checked', this.checked).closest('tr').toggleClass('active', this.checked);
+                $(this).closest('tr').toggleClass('active', this.checked);
+            });
+
+            $items.on('change', function() {
+                $(this).closest('tr').toggleClass('active', this.checked);
+                var allChecked = $items.length === $items.filter(':checked').length;
+                $wrap.find('#lcis-all').prop('checked', allChecked).closest('tr').toggleClass('active', allChecked);
+            });
+
+            $('#lcis-submit').on('click', function() {
+                return confirm($(this).data('confirm'));
+            });
+        });
+JS;
+    wp_add_inline_script( 'jquery', $js );
+}
+add_action( 'admin_enqueue_scripts', 'lcis_admin_assets' );
+
+// Handle the delete request. Returns 'deleted', 'none' or null.
+function lcis_handle_delete( $tables ) {
+    global $wpdb;
+
+    if ( ! isset( $_POST['lcis_submit'] ) ) {
+        return null;
+    }
+
+    if ( ! current_user_can( lcis_capability() ) ) {
+        wp_die( esc_html__( 'You do not have permission to do that.', 'log-cleaner-for-ithemes-security' ) );
+    }
+
+    check_admin_referer( 'lcis-delete-logs', 'lcis_nonce' );
+
+    $selected = isset( $_POST['lcis_tables'] ) ? array_map( 'sanitize_key', (array) wp_unslash( $_POST['lcis_tables'] ) ) : array();
+
+    if ( isset( $_POST['lcis_all'] ) ) {
+        $selected = array_keys( $tables );
+    }
+
+    $selected = array_intersect( $selected, array_keys( $tables ) );
+
+    if ( empty( $selected ) ) {
+        return 'none';
+    }
+
+    foreach ( $selected as $key ) {
+        $table = $tables[ $key ]['table'];
+        if ( lcis_table_exists( $table ) ) {
+            $wpdb->query( "TRUNCATE TABLE `{$table}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        }
+    }
+
+    return 'deleted';
+}
 
 // Admin page.
-function generate_page_content() { ?>
-    
-    <div class="wrap solid-security-log-cleaner">
-        <form action="" method="post">
-            <?php
-                $page = $_GET["page"];
+function lcis_render_page() {
 
-                if (isset($_POST['submit']) && wp_verify_nonce($_POST['things'], 'delete-things')) {
+    if ( ! current_user_can( lcis_capability() ) ) {
+        wp_die( esc_html__( 'You do not have permission to access this page.', 'log-cleaner-for-ithemes-security' ) );
+    }
 
-                    if (isset($_POST['logs']) || isset($_POST['dashboard']) || isset($_POST['lockouts']) || isset($_POST['temp']) || isset($_POST['ds'])) {
+    $tables = lcis_tables();
+    $result = lcis_handle_delete( $tables );
 
-                        global $wpdb;
-                        $charset_collate        = $wpdb->get_charset_collate();
-                        $lockouts_table         = $wpdb->prefix . 'itsec_lockouts';
-                        $logs_table             = $wpdb->prefix . 'itsec_logs';
-                        $dashboard_table        = $wpdb->prefix . 'itsec_dashboard_events';
-                        $temp_table             = $wpdb->prefix . 'itsec_temp';
-                        $storage_ds_table       = $wpdb->prefix . 'itsec_distributed_storage';
+    $counts = array();
+    foreach ( $tables as $key => $info ) {
+        $counts[ $key ] = lcis_row_count( $info['table'] );
+    }
+    $total = array_sum( $counts );
 
-                        if (isset($_POST['lockouts']) || isset($_POST['all'])) {
-                            $wpdb->query("TRUNCATE TABLE " . $lockouts_table);
-                        }
+    $sizes      = lcis_table_sizes( wp_list_pluck( $tables, 'table' ) );
+    $total_size = 0;
+    foreach ( array_filter( $counts ) as $key => $count ) {
+        $total_size += isset( $sizes[ $tables[ $key ]['table'] ] ) ? $sizes[ $tables[ $key ]['table'] ] : 0;
+    }
 
-                        if (isset($_POST['logs']) || isset($_POST['all'])) {
-                            $wpdb->query("TRUNCATE TABLE " . $logs_table);
-                        }
+    // Only list tables that have rows.
+    $rows = array_filter( $counts );
 
-    
-                        if (isset($_POST['dashboard']) || isset($_POST['all'])) {
-                            $wpdb->query("TRUNCATE TABLE " . $dashboard_table);
-                        }
-                        
-                        
-                        if (isset($_POST['temp']) || isset($_POST['all'])) {
-                            $wpdb->query("TRUNCATE TABLE " . $temp_table);
-                        }
+    $log_link = is_multisite() ? network_admin_url( 'admin.php?page=itsec-logs' ) : admin_url( 'admin.php?page=itsec-logs' );
+    ?>
 
-                        if (isset($_POST['ds']) || isset($_POST['all'])) {
-                            $wpdb->query("TRUNCATE TABLE " . $storage_ds_table);
-                        }
-                        ?>
+    <div class="wrap kadence-security-log-cleaner">
 
-                        <div id="message" class="updated notice notice-success is-dismissible" style="margin: 20px 0;">
-                            <p><?php _e("The selected logs have been deleted.", 'log-cleaner-for-solid-security'); ?></p>
-                        </div>
+        <h1><?php esc_html_e( 'Log cleaner for Kadence Security', 'log-cleaner-for-ithemes-security' ); ?></h1>
 
-                    <?php } else { ?>
-                        <div id="message" class="error notice notice-success is-dismissible" style="margin: 20px 0;">
-                            <p><?php _e("You need to select at least one item to delete.", 'log-cleaner-for-solid-security'); ?></p>
-                        </div>
-                    <?php  }
-
-                }
-            ?>
-
-            <h1><?php _e('Log cleaner for Solid Security', 'log-cleaner-for-solid-security'); ?></h1>
-
-            <?php 
-                global $wpdb;
-
-                /* itsec_lockouts table */
-                $table_itsec_lockouts = $wpdb->prefix . 'itsec_lockouts';
-                $check_table_itsec_lockouts = $wpdb->get_var("SHOW TABLES LIKE '$table_itsec_lockouts'");
-                if($check_table_itsec_lockouts == $table_itsec_lockouts) {
-                    $itsec_lockouts = $wpdb->prefix . 'itsec_lockouts';
-                    $lockouts_query = "SELECT count(*) from $itsec_lockouts";
-                    $num_lockouts   = $wpdb->get_var($lockouts_query);
-                } else {
-                    $num_lockouts = 0;
-                }
-                
-                /* itsec_logs table */
-                $table_itsec_logs = $wpdb->prefix . 'itsec_logs';
-                $check_table_itsec_logs = $wpdb->get_var("SHOW TABLES LIKE '$table_itsec_logs'");
-                if($check_table_itsec_logs == $table_itsec_logs) {
-                    $itsec_logs = $wpdb->prefix . 'itsec_logs';
-                    $logs_query = "SELECT count(*) FROM $itsec_logs";
-                    $num_logs   = $wpdb->get_var($logs_query);
-                } else {
-                    $num_logs = 0;
-                }
-                
-                /* itsec_dashboard_events table */
-                $table_itsec_dashboard_events = $wpdb->prefix . 'itsec_dashboard_events';
-                $check_table_itsec_dashboard_events = $wpdb->get_var("SHOW TABLES LIKE '$table_itsec_dashboard_events'");
-                if($check_table_itsec_dashboard_events == $table_itsec_dashboard_events) {
-                    $dashboard_events       = $wpdb->prefix . 'itsec_dashboard_events';
-                    $dashboard_events_query = "SELECT count(*) FROM $dashboard_events";
-                    $num_dashboard_events   = $wpdb->get_var($dashboard_events_query);
-                } else {
-                    $num_dashboard_events = 0;
-                }
-
-                /* itsec_temp table */
-                $table_itsec_temp = $wpdb->prefix . 'itsec_temp';
-                $check_table_itsec_temp = $wpdb->get_var("SHOW TABLES LIKE '$table_itsec_temp'");
-                if($check_table_itsec_temp == $table_itsec_temp) {
-                    $itsec_temp = $wpdb->prefix . 'itsec_temp';
-                    $temp_query = "SELECT count(*) from $itsec_temp";
-                    $num_temps  = $wpdb->get_var($temp_query);
-                } else {
-                    $num_temps = 0;
-                }
-
-                /* itsec_distributed_storage table */
-                $table_itsec_distributed_storage = $wpdb->prefix . 'itsec_distributed_storage';
-                $check_table_itsec_distributed_storage = $wpdb->get_var("SHOW TABLES LIKE '$table_itsec_distributed_storage'");
-                if($check_table_itsec_distributed_storage == $table_itsec_distributed_storage) {
-                    $itsec_distributed_storage = $wpdb->prefix . 'itsec_distributed_storage';
-                    $ds_query = "SELECT count(*) from $itsec_distributed_storage";
-                    $num_ds  = $wpdb->get_var($ds_query);
-                } else {
-                    $num_ds = 0;
-                }
- 
-                $combined_logs  = $num_logs;                
-                $total          = $num_lockouts + $num_temps + $num_dashboard_events + $num_ds + $combined_logs;
-
-                global $current_user;
-
-                if ( is_multisite() ) {
-                    $network = 'network';
-                } else {
-                    $network = '';
-                }
-                $log_link = $network . 'admin.php?page=itsec-logs';
-            ?>
-
-            <?php if($total > 0) { // If there are logs ?>
-            <p class="delete-logs-notice">
-                <?php printf( __( "Note: Continuing here will delete the selected Solid Security logs from the database. You absolutely can not undo this action. If in doubt, <a href='%s'>view the logs first</a> or backup your database.", "log-cleaner-for-solid-security" ), $log_link ); ?>
-            </p>
-            <?php } ?>
-
-            <?php if($total > 0) { // If there are logs ?>
-
-            <div class="log-cleaner boxy">
-
-                <p><strong><?php _e("Clear the following log tables: ", 'log-cleaner-for-solid-security'); ?></strong></p>
-
-                <table width="100%" border="0" cellspacing="0" cellpadding="0">
-                    <tbody>
-                        <tr class="all-items">
-                            <td><input type="checkbox" name="all" id="all" /></td>
-                            <td><?php _e("All", 'log-cleaner-for-solid-security'); ?></td>
-                            <td></td>
-                        </tr>
-                        <?php if($combined_logs > 0) { ?>
-                        <tr>
-                            <td><input type="checkbox" name="logs" class="other-items" /></td>
-                            <td><?php _e("Security logs", 'log-cleaner-for-solid-security'); ?></td>
-                            <td><?php echo $combined_logs; ?> <?php _e("rows", 'log-cleaner-for-solid-security'); ?></td>
-                        </tr>
-                        <?php } ?>
-                        <?php if($num_dashboard_events > 0) { ?>
-                        <tr>
-                            <td><input type="checkbox" name="dashboard" class="other-items" /></td>
-                            <td><?php _e("Dashboard logs", 'log-cleaner-for-solid-security'); ?></td>
-                            <td><?php echo $num_dashboard_events; ?> <?php _e("rows", 'log-cleaner-for-solid-security'); ?></td>
-                        </tr>
-                        <?php } ?>
-                        <?php if($num_lockouts > 0) { ?>
-                        <tr>
-                            <td><input type="checkbox" name="lockouts" class="other-items" /></td>
-                            <td><?php _e("Lockouts", 'log-cleaner-for-solid-security'); ?></td>
-                            <td><?php echo $num_lockouts; ?> <?php _e("rows", 'log-cleaner-for-solid-security'); ?></td>
-                        </tr>
-                        <?php } ?>
-                        <?php if($num_temps > 0) { ?>
-                        <tr>
-                            <td class="no-border"><input type="checkbox" name="temp" class="other-items" /></td>
-                            <td class="no-border"><?php _e("Temps", 'log-cleaner-for-solid-security'); ?></td>
-                            <td class="no-border"><?php echo $num_temps; ?> <?php _e("rows", 'log-cleaner-for-solid-security'); ?></td>
-                        </tr>
-                        <?php } ?>
-                        <?php if($num_ds > 0) { ?>
-                        <tr>
-                            <td class="no-border"><input type="checkbox" name="ds" class="other-items" /></td>
-                            <td class="no-border"><?php _e("Distributed Storage", 'log-cleaner-for-solid-security'); ?></td>
-                            <td class="no-border"><?php echo $num_ds; ?> <?php _e("rows", 'log-cleaner-for-solid-security'); ?></td>
-                        </tr>
-                        <?php } ?>
-                    </tbody>
-                    <tfoot>
-                        <tr>
-                            <td>&nbsp;</td>
-                            <td>&nbsp;</td>
-                            <td>&nbsp;</td>
-                        </tr>
-                        <tr class="total">
-                            <td class="no-border"></td>
-                            <td class="no-border">Total:</td>
-                            <td class="no-border"><?php echo $total; ?> <?php _e("rows", 'log-cleaner-for-solid-security'); ?></td>
-                        </tr>
-                    </tfoot>
-                </table>
-                
-                <script>
-                    jQuery('#all').click(function(event) {   
-                        if(this.checked) {
-                            // Iterate each checkbox
-                            jQuery(':checkbox').each(function() {
-                                this.checked = true;
-                                jQuery( event.target ).closest( 'tbody tr' ).addClass( 'active' );
-                                jQuery('tbody tr').addClass('active');                   
-                            });
-                        } else {
-                            jQuery(':checkbox').each(function() {
-                                this.checked = false;    
-                                jQuery( event.target ).closest( 'tbody tr' ).removeClass( 'active' );
-                                jQuery('tbody tr').removeClass('active');                       
-                            });
-                        }
-                    });
-                    jQuery('.other-items').click(function(event) {
-                        jQuery( event.target ).closest( 'tbody tr' ).toggleClass( 'active' );
-                        jQuery('#all').prop("checked", false);
-                        jQuery('.all-items').removeClass('active');  
-                    });
-                </script>
+        <?php if ( 'deleted' === $result ) { ?>
+            <div class="notice notice-success is-dismissible">
+                <p><?php esc_html_e( 'The selected logs have been deleted.', 'log-cleaner-for-ithemes-security' ); ?></p>
             </div>
+        <?php } elseif ( 'none' === $result ) { ?>
+            <div class="notice notice-error is-dismissible">
+                <p><?php esc_html_e( 'You need to select at least one item to delete.', 'log-cleaner-for-ithemes-security' ); ?></p>
+            </div>
+        <?php } ?>
 
-            <?php  // If the total number of log entries is not 0, and if you're an administrator
-                if(current_user_can( 'manage_options' )) { ?>
-                <input type="submit" name="submit" class="button button-primary" value="<?php _e('Clear logs', 'log-cleaner-for-solid-security'); ?>" onclick="return confirm('<?php _e('This is your last chance. Are you sure?', 'log-cleaner-for-solid-security'); ?>')" />
-                <?php wp_nonce_field( 'delete-things','things' ) ?>
-            <?php } ?>
+        <?php if ( $total > 0 ) { ?>
 
-            <?php } else { // Otherwise, all logs are clear ?>
-                <p class="all-clear">&#10004; <?php _e("All logs are clear.", 'log-cleaner-for-solid-security'); ?></p>
-            <?php } ?>
-    
-        </form>
+            <p class="delete-logs-notice">
+                <?php
+                printf(
+                    wp_kses(
+                        /* translators: %s: URL of the Kadence Security logs page. */
+                        __( "Note: Continuing here is irreversible. You absolutely can not undo this action. If in doubt, <a href='%s'>view the logs first</a> or backup your database.", 'log-cleaner-for-ithemes-security' ),
+                        array( 'a' => array( 'href' => array() ) )
+                    ),
+                    esc_url( $log_link )
+                );
+                ?>
+            </p>
+
+            <form action="" method="post">
+
+                <div class="log-cleaner boxy">
+
+                    <p><strong><?php esc_html_e( 'Clear data from the following tables:', 'log-cleaner-for-ithemes-security' ); ?></strong></p>
+
+                    <table>
+                        <tbody>
+                            <tr class="all-items">
+                                <td><input type="checkbox" name="lcis_all" id="lcis-all" value="1" /></td>
+                                <td><label for="lcis-all"><?php esc_html_e( 'All', 'log-cleaner-for-ithemes-security' ); ?></label></td>
+                                <td></td>
+                                <td></td>
+                            </tr>
+                            <?php foreach ( $rows as $key => $count ) { ?>
+                            <tr>
+                                <td><input type="checkbox" name="lcis_tables[]" id="lcis-<?php echo esc_attr( $key ); ?>" value="<?php echo esc_attr( $key ); ?>" class="other-items" /></td>
+                                <td><label for="lcis-<?php echo esc_attr( $key ); ?>"><?php echo esc_html( $tables[ $key ]['label'] ); ?></label></td>
+                                <td><?php echo esc_html( number_format_i18n( $count ) ); ?> <?php esc_html_e( 'rows', 'log-cleaner-for-ithemes-security' ); ?></td>
+                                <td class="size"><?php echo esc_html( size_format( isset( $sizes[ $tables[ $key ]['table'] ] ) ? $sizes[ $tables[ $key ]['table'] ] : 0, 1 ) ); ?></td>
+                            </tr>
+                            <?php } ?>
+                        </tbody>
+                        <tfoot>
+                            <tr class="total">
+                                <td></td>
+                                <td><?php esc_html_e( 'Total:', 'log-cleaner-for-ithemes-security' ); ?></td>
+                                <td><?php echo esc_html( number_format_i18n( $total ) ); ?> <?php esc_html_e( 'rows', 'log-cleaner-for-ithemes-security' ); ?></td>
+                                <td class="size"><?php echo esc_html( size_format( $total_size, 1 ) ); ?></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                <?php wp_nonce_field( 'lcis-delete-logs', 'lcis_nonce' ); ?>
+                <input type="submit" name="lcis_submit" id="lcis-submit" class="button button-primary" value="<?php esc_attr_e( 'Clear logs', 'log-cleaner-for-ithemes-security' ); ?>" data-confirm="<?php esc_attr_e( 'This is your last chance. Are you sure?', 'log-cleaner-for-ithemes-security' ); ?>" />
+
+            </form>
+
+        <?php } else { ?>
+            <p class="all-clear">&#10004; <?php esc_html_e( 'All logs are clear.', 'log-cleaner-for-ithemes-security' ); ?></p>
+        <?php } ?>
 
     </div>
-
 
 <?php }

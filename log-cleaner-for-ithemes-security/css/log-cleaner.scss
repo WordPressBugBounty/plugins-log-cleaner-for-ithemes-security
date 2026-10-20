@@ -1,59 +1,17 @@
-// Breakpoints
-@mixin breakpoint($point) {
-    @if $point == xs {
-        @media (min-width: 420px) { @content; }
-    } @else if $point == sm {
-        @media (min-width: 640px) { @content; }
-    } @else if $point == md {
-        @media (min-width: 960px)  { @content; }
-    } @else if $point == lg {
-        @media (min-width: 1024px)  { @content; }
-    } @else if $point == xl {
-        @media (min-width: 1600px)  { @content; }
-    }
-}
-
-// Clearfix
-@mixin clear {
-    &:before,
-    &:after {
-        display: table;
-        content: '';
-    }
-
-    &:after {
-        clear: both;
-    }
-}
-
-.tools_page_log-cleaner {
-    #message {
-        
-        display: block;
-        box-sizing: border-box;
-
-        @media only screen and (max-width: 960px) {
-            width: 100%;
-        }
-    }
-
-    form {
-        p {
-            
-
-            @media only screen and (max-width: 960px) {
-                width: 100%;
-            }
-        }
-    }
-}
-.log-cleaner {
-
-    box-sizing: border-box;
+.kadence-security-log-cleaner {
+    padding: 0 30px 0 0;
 
     @media only screen and (max-width: 960px) {
-        width: 100%;
+        padding: 0;
     }
+
+    .notice {
+        margin: 20px 0;
+    }
+}
+
+.log-cleaner {
+    box-sizing: border-box;
 
     &.boxy {
         padding: 25px;
@@ -62,11 +20,12 @@
         position: relative;
     }
 
-
-
     table {
-        width: 320px;
+        width: 440px;
+        max-width: 100%;
         border: solid 1px #f1f1f1;
+        border-collapse: separate;
+        border-spacing: 0;
         padding: 15px;
 
         @media only screen and (max-width: 960px) {
@@ -74,13 +33,27 @@
         }
 
         td {
-            padding: 3px 0;
+            padding: 3px 10px 3px 0;
             vertical-align: top;
             border-bottom: solid 1px #f1f1f1;
+            white-space: nowrap;
+
+            &:last-child {
+                padding-right: 0;
+            }
         }
 
-        .no-border {
+        .size {
+            text-align: right;
+        }
+
+        tbody tr:last-child td,
+        tfoot td {
             border: none;
+        }
+
+        tfoot td {
+            padding-top: 15px;
         }
 
         input {
@@ -89,7 +62,7 @@
     }
 
     .total {
-       font-weight: bold;
+        font-weight: bold;
     }
 
     .active {
@@ -109,20 +82,6 @@
     box-sizing: border-box;
 }
 
-.lc-table {
-
-    width: 170px;
-
-    td {
-        padding: 5px 0;
-    }
-
-    .lc-total td {
-        border-top: solid 1px #ccc;
-    }
-
-}
-
 .delete-logs-notice {
     padding: 10px 15px;
     border-left: solid 4px #ea5c52;
@@ -130,15 +89,4 @@
     box-sizing: border-box;
     background: #fff;
     font-weight: 600;
-}
-
-.solid-security-log-cleaner {
-
-    padding: 0 30px 0 0;
-
-    @media only screen and (max-width: 960px) {
-        padding: 0;
-    }
-
-
 }

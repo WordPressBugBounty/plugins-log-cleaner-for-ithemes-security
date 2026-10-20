@@ -1,19 +1,20 @@
-=== Log cleaner for Solid Security ===
+=== Log cleaner for Kadence Security ===
 Contributors:       mikeyott
-Author URI:         https://rocketapps.com.au/
-Plugin URI:         https://wordpress.org/plugins/log-cleaner-for-ithemes-security/
-Tags:               solid, security, ithemes, log, cleaner
+Tags:               kadence, security, ithemes, log, cleaner
 Requires at least:  6.0
-Tested up to:       6.7
-Stable tag:         1.4.1
+Tested up to:       7.1
+Requires PHP:       7.4
+Stable tag:         1.5.0
 License:            GPLv3 or later
 License URI:        https://www.gnu.org/licenses/gpl-3.0.html
 
-Restores the ability to manually delete Solid Security logs from the database.
+Restores the ability to manually delete Kadence Security (formerly Solid Security / iThemes Security) logs from the database.
 
 == Description ==
 
-In early 2018, the ability to delete logs from the database was <a href="https://wordpress.org/support/topic/latest-update-missing-a-button-to-clear-logs/">removed</a>. This plugin gives you that control back.
+In early 2018, the ability to delete logs from the database was <a href="https://wordpress.org/support/topic/latest-update-missing-a-button-to-clear-logs/">removed</a> from iThemes Security, now known as Kadence Security. This plugin gives you that control back.
+
+Works with Kadence Security, plus older versions released as Solid Security and iThemes Security.
 
 == Installation ==
 
@@ -21,11 +22,11 @@ Install, activate, done.
 
 == Support ==
 
-<a href="https://wordpress.org/support/plugin/log-cleaner-for-ithemes-security">Log cleaner for Solid Security Support</a> at the official Wordpress repository.
+<a href="https://wordpress.org/support/plugin/log-cleaner-for-ithemes-security">Log cleaner for Kadence Security Support</a> at the official WordPress repository.
 
 == How to use ==
 
-* Go to <strong>Tools</strong> -> <strong>Solid Security Log Cleaner</strong>
+* Go to <strong>Tools</strong> -> <strong>Kadence Security Log Cleaner</strong> (on multisite, find <strong>Kadence Security Log Cleaner</strong> in the Network Admin menu)
 * Select which logs to delete (or select 'All')
 * Hit the <strong>Clear logs</strong> button
 * Get on with the rest of your day (optional)
@@ -37,6 +38,19 @@ Note: This plugin comes with no warranty of any kind.
 Deactivate the plugin, delete if desired.
 
 == Changelog ==
+
+= 1.5.0 =
+
+* Long overdue update to reflect new Kadence Security branding.
+* Added disk space used by each table.
+* Added option to clear the itsec_dashboard_lockouts and itsec_geolocation_cache tables.
+* Fix: Translations not loading (text domain now matches the plugin slug again).
+* Fix: Broken "view the logs first" link on multisite.
+* Fix: Selecting only "All" now works without JavaScript.
+* Security: Added capability check to the delete handler and hardened nonce, input and output handling.
+* Multisite: Page now requires the manage_network_options capability.
+* Stylesheet and script now only load on the plugin's own page.
+* Minor presentation tweaks.
 
 = 1.4.1 =
 
@@ -96,7 +110,7 @@ Deactivate the plugin, delete if desired.
 
 = 1.0.8 =
 
-* Added support for deleting dashboard events (Solid Security Pro).
+* Added support for deleting dashboard events (iThemes Security Pro).
 * UI reduction.
 * Sidebar promoting my other WordPress tools.
 
