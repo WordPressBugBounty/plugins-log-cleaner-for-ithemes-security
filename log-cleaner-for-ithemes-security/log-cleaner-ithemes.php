@@ -3,13 +3,14 @@
 Plugin Name:        Log cleaner for Kadence Security
 Plugin URI:         https://wordpress.org/plugins/log-cleaner-for-ithemes-security/
 Description:        Delete Kadence Security (formerly Solid Security / iThemes Security) logs from the database.
-Version:            1.5.0
+Version:            1.5.1
 Requires at least:  6.0
 Requires PHP:       7.4
+Requires Plugins:   better-wp-security
 Author:             Rocket Apps
 Author URI:         https://rocketapps.com.au/
-License:            GPLv3 or later
-License URI:        https://www.gnu.org/licenses/gpl-3.0.html
+License:            GPLv2 or later
+License URI:        https://www.gnu.org/licenses/gpl-2.0.html
 Text Domain:        log-cleaner-for-ithemes-security
 Domain Path:        /languages/
 */
@@ -18,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'LCIS_VERSION', '1.5.0' );
+define( 'LCIS_VERSION', '1.5.1' );
 define( 'LCIS_SLUG', 'log-cleaner-for-ithemes-security' );
 
 // Load translations.
@@ -88,6 +89,12 @@ function lcis_table_sizes( $table_names ) {
     return $sizes;
 }
 
+// Menu icon as a base64 SVG data URI, sized by WordPress as a 20px background image.
+function lcis_menu_icon() {
+    $svg = file_get_contents( plugin_dir_path( __FILE__ ) . 'images/shield.svg' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+    return $svg ? 'data:image/svg+xml;base64,' . base64_encode( $svg ) : 'dashicons-shield'; // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
+}
+
 // Admin menu.
 function lcis_register_menu() {
     global $lcis_hook;
@@ -99,7 +106,7 @@ function lcis_register_menu() {
             lcis_capability(),
             LCIS_SLUG,
             'lcis_render_page',
-            plugins_url( 'images/shield.svg', __FILE__ )
+            lcis_menu_icon()
         );
     } else {
         $lcis_hook = add_management_page(

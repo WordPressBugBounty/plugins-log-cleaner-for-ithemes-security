@@ -4,9 +4,9 @@ Tags:               kadence, security, ithemes, log, cleaner
 Requires at least:  6.0
 Tested up to:       7.1
 Requires PHP:       7.4
-Stable tag:         1.5.0
-License:            GPLv3 or later
-License URI:        https://www.gnu.org/licenses/gpl-3.0.html
+Stable tag:         1.5.1
+License:            GPLv2 or later
+License URI:        https://www.gnu.org/licenses/gpl-2.0.html
 
 Restores the ability to manually delete Kadence Security (formerly Solid Security / iThemes Security) logs from the database.
 
@@ -38,6 +38,11 @@ Note: This plugin comes with no warranty of any kind.
 Deactivate the plugin, delete if desired.
 
 == Changelog ==
+
+= 1.5.1 =
+
+* Fix: Large menu icon in multisite installations.
+* Added 'Requires Plugins' to header.
 
 = 1.5.0 =
 
