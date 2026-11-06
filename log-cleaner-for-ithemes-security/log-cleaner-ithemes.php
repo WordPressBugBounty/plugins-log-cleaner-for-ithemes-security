@@ -3,10 +3,9 @@
 Plugin Name:        Log cleaner for Kadence Security
 Plugin URI:         https://wordpress.org/plugins/log-cleaner-for-ithemes-security/
 Description:        Delete Kadence Security (formerly Solid Security / iThemes Security) logs from the database.
-Version:            1.5.1
+Version:            1.5.2
 Requires at least:  6.0
 Requires PHP:       7.4
-Requires Plugins:   better-wp-security
 Author:             Rocket Apps
 Author URI:         https://rocketapps.com.au/
 License:            GPLv2 or later
@@ -19,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'LCIS_VERSION', '1.5.1' );
+define( 'LCIS_VERSION', '1.5.2' );
 define( 'LCIS_SLUG', 'log-cleaner-for-ithemes-security' );
 
 // Load translations.

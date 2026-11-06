@@ -4,7 +4,7 @@ Tags:               kadence, security, ithemes, log, cleaner
 Requires at least:  6.0
 Tested up to:       7.1
 Requires PHP:       7.4
-Stable tag:         1.5.1
+Stable tag:         1.5.2
 License:            GPLv2 or later
 License URI:        https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -38,6 +38,10 @@ Note: This plugin comes with no warranty of any kind.
 Deactivate the plugin, delete if desired.
 
 == Changelog ==
+
+= 1.5.2 =
+
+* Fix: Plugin could not be activated when Kadence Security Pro was installed instead of the free version. Removed the 'Requires Plugins' header.
 
 = 1.5.1 =
 
